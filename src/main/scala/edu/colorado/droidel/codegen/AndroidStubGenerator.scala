@@ -6,7 +6,7 @@ import com.ibm.wala.classLoader.IClass
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.squareup.javawriter.JavaWriter
 import edu.colorado.walautil.{ClassUtil, JavaUtil}
-import scala.collection.JavaConversions._
+import scala.jdk.CollectionConverters._
 
 trait AndroidStubGenerator {
   // type aliases to make some type signatures more clear
@@ -23,7 +23,7 @@ trait AndroidStubGenerator {
   def emitCaseSplitOnClassNameAlloc(classes : Iterable[IClass], defaultRet : Expression, writer : JavaWriter,
                                     cha : IClassHierarchy) : Unit = {
     def hasDefaultConstructor(c : IClass) : Boolean =
-      c.getDeclaredMethods.exists(m => m.isInit && m.getNumberOfParameters == 1)
+      c.getDeclaredMethods.asScala.exists(m => m.isInit && m.getNumberOfParameters == 1)
 
     var firstPass = true
     classes.foreach(c =>

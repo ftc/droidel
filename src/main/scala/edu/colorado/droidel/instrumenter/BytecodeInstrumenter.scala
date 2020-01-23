@@ -17,7 +17,7 @@ import edu.colorado.walautil.ClassUtil
 // individually
 class BytecodeInstrumenter {
   val DEBUG = false
-  val instrumenter = new OfflineInstrumenter(true)
+  val instrumenter = new OfflineInstrumenter()
   
   type ClassName = String
   

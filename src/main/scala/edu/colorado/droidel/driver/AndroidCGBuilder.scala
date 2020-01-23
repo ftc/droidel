@@ -3,14 +3,14 @@ package edu.colorado.droidel.driver
 import com.ibm.wala.classLoader.{IClass, IMethod}
 import com.ibm.wala.ipa.callgraph.AnalysisOptions.ReflectionOptions
 import com.ibm.wala.ipa.callgraph.impl.{ArgumentTypeEntrypoint, ClassHierarchyClassTargetSelector, ClassHierarchyMethodTargetSelector}
-import com.ibm.wala.ipa.callgraph.propagation.SSAContextInterpreter
+import com.ibm.wala.ipa.callgraph.propagation.{InstanceKey, SSAContextInterpreter}
 import com.ibm.wala.ipa.callgraph.propagation.cfa.ZeroXInstanceKeys
-import com.ibm.wala.ipa.callgraph.{AnalysisCache, AnalysisOptions, AnalysisScope, CallGraphBuilder, ClassTargetSelector, ContextSelector, Entrypoint, MethodTargetSelector}
-import com.ibm.wala.ipa.cha.{ClassHierarchy, IClassHierarchy}
+import com.ibm.wala.ipa.callgraph.{AnalysisCache, AnalysisCacheImpl, AnalysisOptions, AnalysisScope, CallGraphBuilder, ClassTargetSelector, ContextSelector, Entrypoint, MethodTargetSelector}
+import com.ibm.wala.ipa.cha.{ClassHierarchy, ClassHierarchyFactory, IClassHierarchy}
 import edu.colorado.walautil.cg.MemoryFriendlyZeroXContainerCFABuilder
 import edu.colorado.walautil.{ClassUtil, JavaUtil, WalaAnalysisResults}
 
-import scala.collection.JavaConversions._
+import scala.jdk.CollectionConverters._
 
 class AndroidCGBuilder(analysisScope : AnalysisScope, harnessClass : String = "Landroid/app/ActivityThread",
                        harnessMethod : String = "main") {
@@ -19,9 +19,9 @@ class AndroidCGBuilder(analysisScope : AnalysisScope, harnessClass : String = "L
     if (!harnessClass.startsWith("L") || harnessClass.contains(".")) ClassUtil.walaifyClassName(harnessClass)
     else harnessClass
 
-  private val cha = ClassHierarchy.make(analysisScope)
+  private val cha = ClassHierarchyFactory.make(analysisScope)
 
-  val cache = new AnalysisCache()
+  val cache = new AnalysisCacheImpl()
   
   def makeAndroidCallGraph() : WalaAnalysisResults = {    
     val entrypoints = makeEntrypoints
@@ -43,21 +43,22 @@ class AndroidCGBuilder(analysisScope : AnalysisScope, harnessClass : String = "L
       methods.foldLeft (entrypoints) ((entrypoints, m) => 
         if (isEntrypointMethod(m)) mkEntrypoint(m, cha) :: entrypoints else entrypoints) 
     
-    cha.foldLeft (List.empty[Entrypoint]) ((entrypoints, c) => 
-      if (isEntrypointClass(c)) addMethodsToEntrypoints(c.getDeclaredMethods(), entrypoints)
+    cha.asScala.foldLeft (List.empty[Entrypoint]) ((entrypoints, c) =>
+      if (isEntrypointClass(c)) addMethodsToEntrypoints(c.getDeclaredMethods().asScala, entrypoints)
       else entrypoints
     )
   }
   
   def makeOptions(entrypoints : Iterable[Entrypoint]) : AnalysisOptions = {
-    val collectionEntrypoints : java.util.Collection[_ <: Entrypoint] = entrypoints
+    val collectionEntrypoints : java.util.Collection[_ <: Entrypoint] = entrypoints.toList.asJava
     val options = new AnalysisOptions(analysisScope, collectionEntrypoints)
     // turn off handling of Method.invoke(), which dramatically speeds up pts-to analysis
     options.setReflectionOptions(ReflectionOptions.NO_METHOD_INVOKE)   
     options
   }
-  
-  def makeCallGraphBuilder(options : AnalysisOptions, cache : AnalysisCache) : CallGraphBuilder = {
+
+  // TODO: Old return type was InstanceKey ?
+  def makeCallGraphBuilder(options : AnalysisOptions, cache : AnalysisCache): MemoryFriendlyZeroXContainerCFABuilder = {
     assert(options.getMethodTargetSelector() == null, "Method target selector should not be set at this point.")
     assert(options.getClassTargetSelector() == null, "Class target selector should not be set at this point.")
     com.ibm.wala.ipa.callgraph.impl.Util.addDefaultSelectors(options, cha)

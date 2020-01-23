@@ -5,7 +5,7 @@ import java.util.jar.JarFile
 
 import com.ibm.wala.classLoader.{IClass, IField, IMethod}
 import com.ibm.wala.ipa.callgraph.AnalysisScope
-import com.ibm.wala.ipa.cha.{ClassHierarchy, IClassHierarchy}
+import com.ibm.wala.ipa.cha.{ClassHierarchy, ClassHierarchyFactory, IClassHierarchy}
 import com.ibm.wala.shrikeBT.MethodEditor.{Output, Patch}
 import com.ibm.wala.shrikeBT.{DupInstruction, IInvokeInstruction, MethodEditor, NewInstruction, _}
 import com.ibm.wala.ssa.{IR, SSAInvokeInstruction, SSANewInstruction, SymbolTable}
@@ -20,7 +20,7 @@ import edu.colorado.droidel.parser._
 import edu.colorado.droidel.preprocessor.CHAComplementer
 import edu.colorado.walautil.{CHAUtil, ClassUtil, IRUtil, JavaUtil, Timer, Util}
 
-import scala.collection.JavaConversions._
+import scala.jdk.CollectionConverters._
 import scala.io.Source
 import scala.sys.process._
 
@@ -199,12 +199,12 @@ class AndroidAppTransformer(_appPath : String, androidJar : File, droidelHome : 
     def isInflate(m : MethodReference) : Boolean = 
       m.getName().toString() == INFLATE && m.getNumberOfParameters() >= 2 
     
-    cha.foldLeft (Map.empty[Int,Set[IClass]]) ((map, c) => 
-      if (!ClassUtil.isLibrary(c)) c.getDeclaredMethods.foldLeft (map) ((map, m) => {
+    cha.asScala.foldLeft (Map.empty[Int,Set[IClass]]) ((map, c) =>
+      if (!ClassUtil.isLibrary(c)) c.getDeclaredMethods.asScala.foldLeft (map) ((map, m) => {
         val ir = IRUtil.makeIR(m)
         if (ir != null) {
           val tbl = ir.getSymbolTable()
-          ir.iterateNormalInstructions().foldLeft (map) ((map, i) => i match {
+          ir.iterateNormalInstructions().asScala.foldLeft (map) ((map, i) => i match {
             case i : SSAInvokeInstruction if isSetContentView(i.getDeclaredTarget()) || isInflate(i.getDeclaredTarget()) =>
               // TODO: THIS IS A HACK! specify list of inflate methods and parameter nums for layouts
               (0 to i.getNumberOfUses() - 1).find(use => tbl.isIntegerConstant(i.getUse(use))) match {
@@ -231,7 +231,7 @@ class AndroidAppTransformer(_appPath : String, androidJar : File, droidelHome : 
    // collect callbacks registered in the manifest
   private def collectManifestDeclaredCallbacks(layoutMap : Map[IClass,Set[LayoutElement]]) : Map[IClass,Set[IMethod]] = {    
     def getEventHandlerMethod(eventHandlerName : String, parentClass : IClass) : Option[IMethod] =
-      parentClass.getAllMethods().collect({ case m if m.getName().toString() == eventHandlerName => m }) match {
+      parentClass.getAllMethods().asScala.collect({ case m if m.getName().toString() == eventHandlerName => m }) match {
         case eventHandlers if eventHandlers.isEmpty =>
           // TODO: no sense in having this warning now. bring it back once our association of Activity's to layout is less dumb
           //println(s"Warning: couldn't find manifest-declared event handler method $eventHandlerName as a method on ${ClassUtil.pretty(parentClass)}")
@@ -284,7 +284,7 @@ class AndroidAppTransformer(_appPath : String, androidJar : File, droidelHome : 
       else callbackClasses.foldLeft (Map.empty[IClass,List[IClass]]) ((m, t) => cha.lookupClass(t) match {
         case null => m
         case cbClass =>
-          (cha.computeSubClasses(t) ++ cha.getImplementors(t)).foldLeft (m) ((m, c) =>
+          (cha.computeSubClasses(t).asScala ++ cha.getImplementors(t).asScala).foldLeft (m) ((m, c) =>
             m + (c -> (cbClass :: m.getOrElse(c, List.empty[IClass]))))
       })
 
@@ -294,11 +294,11 @@ class AndroidAppTransformer(_appPath : String, androidJar : File, droidelHome : 
     // have to iterate, instrument, build harness, rinse and repeat until we reach a fixed point
     // con: if some methods in the class hierarchy aren't reachable, we will extract their application-created callback types anyway.
     // this is sound, but not precise.
-    val (instrFlds, allocMap, stubMap) = cha.foldLeft (List.empty[FieldReference], 
+    val (instrFlds, allocMap, stubMap) = cha.asScala.foldLeft (List.empty[FieldReference],
                                                        Map.empty[String,Map[IMethod,Iterable[(Int, List[FieldReference])]]],
                                                        Map.empty[String,Map[IMethod,Iterable[(Int, Patch)]]]) ((trio, clazz) =>
       if (instrumentLibs || !ClassUtil.isLibrary(clazz)) {
-        val (flds, allocMap, stubMap) = clazz.getDeclaredMethods()
+        val (flds, allocMap, stubMap) = clazz.getDeclaredMethods().asScala
                                         .foldLeft (trio._1, 
                                                    Map.empty[IMethod,List[(Int, List[FieldReference])]],
                                                    Map.empty[IMethod,Iterable[(Int, Patch)]]) ((trio, m) => {
@@ -406,7 +406,7 @@ class AndroidAppTransformer(_appPath : String, androidJar : File, droidelHome : 
   // TODO: curate by reasoning about callback registration. only need to include registered classes
   private def makeFrameworkCreatedTypesMap(cha : IClassHierarchy) : Map[IClass,Set[IClass]] = {
     val m = AndroidLifecycle.getOrCreateFrameworkCreatedClasses(cha).foldLeft(Map.empty[IClass, Set[IClass]])((m, c) =>
-      cha.computeSubClasses(c.getReference()).filter(c => !ClassUtil.isLibrary(c)) match {
+      cha.computeSubClasses(c.getReference()).asScala.filter(c => !ClassUtil.isLibrary(c)) match {
         //case appSubclasses if appSubclasses.isEmpty => m
         case appSubclasses =>
           // we only handle public classes because we need to be able to instantiate them and call their callbakcs
@@ -446,19 +446,19 @@ class AndroidAppTransformer(_appPath : String, androidJar : File, droidelHome : 
 
     f.getAnnotations match {
       case null => false
-      case annots => annots.exists(a => isInjectionAnnotation(a))
+      case annots => annots.asScala.exists(a => isInjectionAnnotation(a))
     }
   }
 
   private def getDependencyInjectedFields(cha : IClassHierarchy) =
-    cha.foldLeft (Map.empty[String,Map[IMethod,Iterable[(Int,Patch)]]]) ((m, c) =>
+    cha.asScala.foldLeft (Map.empty[String,Map[IMethod,Iterable[(Int,Patch)]]]) ((m, c) =>
       if (ClassUtil.isLibrary(c)) m
       else {
         // TODO: handle dependecy injection on static fields as well? don't think this is common in practice
-        val dependencyInjectedFields = c.getDeclaredInstanceFields().filter(f => hasDependencyInjectionAnnotation(f))
+        val dependencyInjectedFields = c.getDeclaredInstanceFields().asScala.filter(f => hasDependencyInjectionAnnotation(f))
         if (dependencyInjectedFields.isEmpty) m
         else {
-          val constructors = c.getDeclaredMethods.filter(method => method.isInit)
+          val constructors = c.getDeclaredMethods.asScala.filter(method => method.isInit)
           assert(!constructors.isEmpty)
           val patch =
             new MethodEditor.Patch() {
@@ -469,7 +469,7 @@ class AndroidAppTransformer(_appPath : String, androidJar : File, droidelHome : 
                   val chosenFieldTypeClass =
                     if (fieldTypeClass.isAbstract || fieldTypeClass.isInterface)
                     // we can't allocate an abstract type or an interface--choose a subclass instead
-                      cha.computeSubClasses(fieldTypeClass.getReference).find(c => !c.isAbstract && !c.isInterface)
+                      cha.computeSubClasses(fieldTypeClass.getReference).asScala.find(c => !c.isAbstract && !c.isInterface)
                     else Some(fieldTypeClass)
                   chosenFieldTypeClass match {
                     case Some(chosenFieldTypeClass) =>
@@ -542,7 +542,7 @@ class AndroidAppTransformer(_appPath : String, androidJar : File, droidelHome : 
         }          
         // add all methods that start with on for good measure
         // TODO: this is a hack. make an exhaustive list of these methods instead
-        val onMethodsAndOverrides = appClass.getAllMethods().foldLeft (appOverrides.toSet) ((s, m) => 
+        val onMethodsAndOverrides = appClass.getAllMethods().asScala.foldLeft (appOverrides.toSet) ((s, m) =>
           if (!m.isPrivate() && !ClassUtil.isLibrary(m.getDeclaringClass()) && m.getName().toString().startsWith("on") &&
             // hack to avoid difficulties with generic methods, whose parameter types are often Object
             (0 to m.getNumberOfParameters() - 1)
@@ -713,7 +713,7 @@ class AndroidAppTransformer(_appPath : String, androidJar : File, droidelHome : 
     println(s"Transforming $appPath")
     // create class hierarchy from app
     val analysisScope = makeAnalysisScope(useHarness = false)
-    val cha = ClassHierarchy.make(analysisScope)
+    val cha = ClassHierarchyFactory.make(analysisScope)
     // parse app layout
     val (layoutMap, manifestDeclaredCallbackMap) = parseLayout(cha)
     // generate app-specialized stubs for layout
@@ -741,7 +741,7 @@ class AndroidAppTransformer(_appPath : String, androidJar : File, droidelHome : 
                              harnessMethod = harnessMethodName)
       val walaRes = cgBuilder.makeAndroidCallGraph()
       println("Reachable methods:")
-      walaRes.cg.foreach(n => println(ClassUtil.pretty(n)))
+      walaRes.cg.asScala.foreach(n => println(ClassUtil.pretty(n)))
     }
 
     // cleanup generated stub and harness source files

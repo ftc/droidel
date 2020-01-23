@@ -7,7 +7,7 @@ import edu.colorado.droidel.codegen.TypeInhabitor._
 import edu.colorado.walautil.Types.MMap
 import edu.colorado.walautil.{ClassUtil, Util}
 
-import scala.collection.JavaConversions._
+import scala.jdk.CollectionConverters._
 
 object TypeInhabitor {
   val DEBUG = false
@@ -110,7 +110,7 @@ class TypeInhabitor(reuseInhabitants : Boolean = true) {
           val typ = clazz.getReference()     
           // look for a public static field of the type
           // TODO: handle subtyping
-          val publicStaticFlds = clazz.getAllStaticFields().collect({
+          val publicStaticFlds = clazz.getAllStaticFields().asScala.collect({
             case f if f.isPublic() && f.getFieldTypeReference() == clazz.getReference() => f 
           })
           
@@ -120,8 +120,8 @@ class TypeInhabitor(reuseInhabitants : Boolean = true) {
             (inhabitStaticFieldRead(publicStaticFlds.head), allocs)        
           } else {        
             // find a public constructor for the type
-            val constructors = clazz.getDeclaredMethods().filter(m =>
-              m.isPublic() && m.isInit() && !ClassUtil.getNonReceiverParameterTypes(m).contains(typ)
+            val constructors = clazz.getDeclaredMethods().asScala.filter(m =>
+              m.isPublic() && m.isInit() && !ClassUtil.getNonReceiverParameterTypes(m).toSet.contains(typ)
             )     
             if (!constructors.isEmpty) {
               // for now, just try constructor with least number of args and give up if it doesn't work
@@ -130,9 +130,9 @@ class TypeInhabitor(reuseInhabitants : Boolean = true) {
               inhabitAllocation(easiestConstructor, cha, allocs)
             } else {                    
               // can't find a public constructor, try a static factory
-              val staticFactories = clazz.getAllMethods().filter(m =>
+              val staticFactories = clazz.getAllMethods().asScala.filter(m =>
                 // TODO: check for covariant return types
-                m.isPublic() && m.isStatic() && m.getReturnType() == typ && !ClassUtil.getParameterTypes(m).contains(typ)
+                m.isPublic() && m.isStatic() && m.getReturnType() == typ && !ClassUtil.getParameterTypes(m).toSet.contains(typ)
               )
               if (staticFactories.isEmpty) { // TODO: backtrack on failure
                 if (DEBUG) printInhabitFailMsg(clazz)
@@ -181,7 +181,7 @@ class TypeInhabitor(reuseInhabitants : Boolean = true) {
     choices match {
       case null => None
       case subs =>
-        val concreteSubs = subs.filter(sub => !sub.isAbstract() && !sub.isInterface() && sub.isPublic() && !currentlyInhabiting.contains(sub))
+        val concreteSubs = subs.asScala.filter(sub => !sub.isAbstract() && !sub.isInterface() && sub.isPublic() && !currentlyInhabiting.contains(sub))
         if (concreteSubs.isEmpty) None
         else Some(concreteSubs.head)
     }

@@ -13,7 +13,7 @@ import edu.colorado.droidel.constants.AndroidConstants
 import edu.colorado.droidel.constants.DroidelConstants._
 import edu.colorado.walautil.ClassUtil
 
-import scala.collection.JavaConversions._
+import scala.jdk.CollectionConverters._
 
 object AndroidSystemServiceStubGenerator {
   val DEBUG = false
@@ -112,9 +112,9 @@ class AndroidSystemServiceStubGenerator(cha : IClassHierarchy, androidJarPath : 
     assert(getSystemService != null, "Couldn't find getSystemService() method")
     
     // get all the library methods that a call to getSystemService() might dispatch to (ignoring covariance for simplicity's sake)
-    val possibleOverrides = cha.computeSubClasses(contextTypeRef).foldLeft (List(getSystemService)) ((l, c) =>
+    val possibleOverrides = cha.computeSubClasses(contextTypeRef).asScala.foldLeft (List(getSystemService)) ((l, c) =>
       if (!ClassUtil.isLibrary(c)) l
-      else c.getDeclaredMethods().foldLeft (l) ((l, m) =>
+      else c.getDeclaredMethods().asScala.foldLeft (l) ((l, m) =>
         if (m.getName().toString() == GET_SYSTEM_SERVICE && m.getDescriptor().toString() == getSystemServiceDescriptor) m :: l
         else l
       )

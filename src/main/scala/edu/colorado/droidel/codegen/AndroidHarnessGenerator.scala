@@ -13,7 +13,7 @@ import com.ibm.wala.types.{ClassLoaderReference, FieldReference, TypeReference}
 import edu.colorado.droidel.constants.{AndroidConstants, DroidelConstants}
 import edu.colorado.walautil._
 
-import scala.collection.JavaConversions._
+import scala.jdk.CollectionConverters._
 
 object AndroidHarnessGenerator {
   private val DEBUG = false
@@ -66,7 +66,7 @@ class AndroidHarnessGenerator(cha : IClassHierarchy, instrumentationVars : Itera
       assert(!c.isAbstract && !c.isInterface, "Trying to inhabit abstract or interface type " + c)
       assert(!harnessState._2.contains(c), "Already inhabited " + c) // TODO: use type cache value here
       assert(!harnessState._3.contains(c), "Already inhabiting " + c) // TODO: add workaround for this case
-      val constructors = c.getDeclaredMethods.filter(m => m.isInit)
+      val constructors = c.getDeclaredMethods.asScala.filter(m => m.isInit)
       assert(!constructors.isEmpty, "Empty constructors") // TODO: in this case, just do allocation
       val (newHarnessState, allocNums) =
       constructors.foldLeft (harnessState, List.empty[Int]) ((pair, constructor) => {
@@ -92,7 +92,7 @@ class AndroidHarnessGenerator(cha : IClassHierarchy, instrumentationVars : Itera
             ).toArray
           val callPc = pc + 1
           val callSite = CallSiteReference.make(callPc, constructor.getReference, IInvokeInstruction.Dispatch.SPECIAL)
-          val callInstr = IRUtil.factory.InvokeInstruction(callPc, paramBindings, DUMMY_EXCEPTION, callSite)
+          val callInstr = IRUtil.factory.InvokeInstruction(callPc, paramBindings, DUMMY_EXCEPTION, callSite, ???)
           (callInstr :: instrs, typeCache, currentlyInhabiting, callPc, valueNumCounter)
         }
         (retState, allocValueNum :: allocNums)
@@ -137,7 +137,7 @@ class AndroidHarnessGenerator(cha : IClassHierarchy, instrumentationVars : Itera
     })        
         
     // TODO: do something smarter here too -- use our hardcoded list of callback classes and callback methods within those classes
-    def getCallbacksOnType(typ : IClass) : Iterable[IMethod] = typ.getDeclaredMethods().filter(m => !m.isInit && !m.isClinit && m.isPublic())
+    def getCallbacksOnType(typ : IClass) : Iterable[IMethod] = typ.getDeclaredMethods().asScala.filter(m => !m.isInit && !m.isClinit && m.isPublic())
     
     // create statements invoking all lifecycle and manifest-defined callbacks on each of our framework-created types
     val (frameworkCreatedCbCalls, allocStatements1) = frameworkCreatedTypesCallbackMap.foldLeft (List.empty[Statement],allocStatements) ((l, entry) => {
@@ -158,11 +158,11 @@ class AndroidHarnessGenerator(cha : IClassHierarchy, instrumentationVars : Itera
           (0 to m.getNumberOfParameters() - 1).map(i => m.getParameterType(i))
         }
         
-        frameworkCreatedClass.getAllImplementedInterfaces().foldLeft (l) ((l, interfaceType) => {          
+        frameworkCreatedClass.getAllImplementedInterfaces().asScala.foldLeft (l) ((l, interfaceType) => {
           // TODO: somewhat of a hack -- only invoke callback methods that our class directly overrides. 
           // this can miss callbacks that an application-scope superclass overrides
-          val frameworkMethodsByName = frameworkCreatedClass.getDeclaredMethods().groupBy(m => m.getName())
-          interfaceType.getDeclaredMethods().filter(m => m.isPublic() && !m.isStatic && CHAUtil.mayOverride(m, frameworkCreatedClass, cha)).foldLeft (l) ((l, m) => {
+          val frameworkMethodsByName = frameworkCreatedClass.getDeclaredMethods().asScala.groupBy(m => m.getName())
+          interfaceType.getDeclaredMethods().asScala.filter(m => m.isPublic() && !m.isStatic && CHAUtil.mayOverride(m, frameworkCreatedClass, cha)).foldLeft (l) ((l, m) => {
             val possibleOverrides = frameworkMethodsByName(m.getName())
                                     .filter(possibleOverride => !possibleOverride.isStatic() &&
                                             possibleOverride.getNumberOfParameters() == m.getNumberOfParameters())
@@ -228,7 +228,7 @@ class AndroidHarnessGenerator(cha : IClassHierarchy, instrumentationVars : Itera
       else layoutElems.foldLeft (List.empty[Statement], allocStatements3) ((l, e) => cha.lookupClass(e.typ) match {
         case null => l
         case clazz =>
-          clazz.getAllMethods.foldLeft (l) ((l, m) =>
+          clazz.getAllMethods.asScala.foldLeft (l) ((l, m) =>
             if (m.isPublic && isEventDisaptch(m)) {
               val (call, allocs) =
                 inhabitor.inhabitFunctionCall(m, Some(s"${DroidelConstants.STUB_DIR}.${DroidelConstants.LAYOUT_STUB_CLASS}.${e.name}"),

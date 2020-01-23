@@ -5,8 +5,7 @@ import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.types._
 import edu.colorado.droidel.constants.AndroidConstants._
 import edu.colorado.walautil.{GraphImpl, ClassUtil}
-
-import scala.collection.JavaConversions._
+import scala.jdk.CollectionConverters._
 
 /** list taken from FlowDroid's AndroidEntryPointConstants.java */
 object AndroidLifecycle {
@@ -139,7 +138,7 @@ object AndroidLifecycle {
         cbMethods.map(m => {
           val methodRef = MethodReference.findOrCreate(frameworkTypeRef, Selector.make(m))
           cha.resolveMethod(methodRef) match {
-            case null => sys.error(s"Couldn't find method $methodRef on class $frameworkType. Methods: ${frameworkType.getAllMethods().toList}")
+            case null => sys.error(s"Couldn't find method $methodRef on class $frameworkType. Methods: ${frameworkType.getAllMethods().asScala.toList}")
             case m => m
           }
         })

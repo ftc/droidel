@@ -15,7 +15,7 @@ import edu.colorado.droidel.constants.DroidelConstants._
 import edu.colorado.droidel.parser.{LayoutElement, LayoutFragment, LayoutView}
 import edu.colorado.walautil.{CHAUtil, ClassUtil, Util}
 
-import scala.collection.JavaConversions._
+import scala.jdk.CollectionConverters._
 
 
 object AndroidLayoutStubGenerator {
@@ -88,11 +88,11 @@ class AndroidLayoutStubGenerator(resourceMap : Map[IClass,Set[LayoutElement]],
     }.map(name => ClassUtil.walaifyClassName(name))
         
     // find a class in the class hierarchy corresponding to one of our guesses for the package expanded name
-    cha.find(c => packageExpandedNames.contains(c.getName().toString())) match {
+    cha.asScala.find(c => packageExpandedNames.contains(c.getName().toString())) match {
       case Some(c) => Some(c.getReference)
       case None =>
         // easy lookup failed. just look for a name match
-        cha.find(c => c.getName().toString().contains(name)) match {
+        cha.asScala.find(c => c.getName().toString().contains(name)) match {
           case Some(c) => Some(c.getReference)
           case None =>
             val msg = s"Warning: couldn't find class name corresponding to any of $packageExpandedNames in class hierarchy"

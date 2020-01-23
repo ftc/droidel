@@ -10,7 +10,6 @@ import com.squareup.javawriter.JavaWriter
 import edu.colorado.droidel.constants.DroidelConstants._
 import edu.colorado.walautil.ClassUtil
 
-import scala.collection.JavaConversions._
 
 class AndroidFrameworkCreatedTypesStubGenerator extends AndroidStubGenerator {
 

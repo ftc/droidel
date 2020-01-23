@@ -12,7 +12,7 @@ import com.ibm.wala.types.MethodReference
 import edu.colorado.droidel.constants.DroidelConstants
 import edu.colorado.walautil.{ClassUtil, IRUtil, WalaAnalysisResults}
 
-import scala.collection.JavaConversions._
+import scala.jdk.CollectionConverters._
 
 /** class for identifying "absurdities", or likely soundness issues in a callgraph/points-to analysis */
 class AbsurdityIdentifier(harnessClassName : String) {
@@ -34,7 +34,7 @@ class AbsurdityIdentifier(harnessClassName : String) {
     hm.getPointerKeyForLocal(n, valueNum).asInstanceOf[LocalPointerKey]
   
   def getPt(k : PointerKey, hg : HeapGraph[InstanceKey]) : Set[InstanceKey] =
-    hg.getSuccNodes(k).toSet.map((k : Object) => k.asInstanceOf[InstanceKey])
+    hg.getSuccNodes(k).asScala.toSet.map((k : Object) => k.asInstanceOf[InstanceKey])
   
   def formatMethod(m : MethodReference) : String = 
     ClassUtil.pretty(m).stripPrefix("L").replace(File.separatorChar,'.').replace('<','(').replace('>',')')
@@ -46,7 +46,7 @@ class AbsurdityIdentifier(harnessClassName : String) {
     import walaRes._
 
     val methodNodeMap =
-      cg.filter(n => (reportLibraryAbsurdities || !ClassUtil.isLibrary(n)) &&
+      cg.asScala.filter(n => (reportLibraryAbsurdities || !ClassUtil.isLibrary(n)) &&
                      !isGeneratedMethod(n.getMethod()))
       .groupBy(n => n.getMethod().getReference())
 
@@ -120,7 +120,7 @@ class AbsurdityIdentifier(harnessClassName : String) {
   def getBytecodeIndexAndSourceLine(i : SSAInstruction, n : CGNode, index : Int) : (BytecodeIndex,SourceLine) = {
     val bcIndex =
       n.getMethod() match {
-        case m :IBytecodeMethod => m.getBytecodeIndex(index)
+        case m : IBytecodeMethod[Any] => m.getBytecodeIndex(index)
         case _ => -1
     }
     val srcLine = IRUtil.getSourceLine(i, n.getIR())
@@ -149,25 +149,31 @@ class AbsurdityIdentifier(harnessClassName : String) {
   }
 
   def getUncalledMethods(cg : CallGraph, cha : IClassHierarchy) : Set[IMethod] = {
-    val cgMethods = cg.foldLeft (Set.empty[IMethod]) ((s, n) => s + n.getMethod)
-    cha.foldLeft (Set.empty[IMethod]) ((s, c) =>
-      if (!ClassUtil.isLibrary(c)) c.getAllMethods.foldLeft (s) ((s, m) => if (cgMethods.contains(m)) s else s + m)
+    val cgMethods = cg.asScala.foldLeft (Set.empty[IMethod]) ((s, n) => s + n.getMethod)
+    cha.asScala.foldLeft (Set.empty[IMethod]) ((s, c) =>
+      if (!ClassUtil.isLibrary(c)) c.getAllMethods.asScala.foldLeft (s) ((s, m) => if (cgMethods.contains(m)) s else s + m)
       else s
     )
   }
 
   /** return the set of methods for @param c that are not syntactically called by other methods of @param c */
   def getNonSyntacticallyCalledMethods(c : IClass, cg : CallGraph, cha : IClassHierarchy) = {
-    val allMethods = c.getAllMethods.toSet
+    val allMethods: Set[IMethod] = c.getAllMethods.asScala.toSet
     // get all methods syntactically called in the IR for m, remove them from s
     allMethods.foldLeft (allMethods) ((s, m) =>
-      cg.getNodes(m.getReference).foldLeft (allMethods) ((s, n) =>
+      cg.getNodes(m.getReference).asScala.foldLeft (allMethods) ((s, n) =>
         if (n.getIR == null) s
-        else
-          n.getIR.getInstructions.foldLeft(allMethods)((s, i) => i match {
-            case i: SSAInvokeInstruction => s - cha.resolveMethod(i.getCallSite.getDeclaredTarget)
+        else {
+          val instructions: Array[SSAInstruction] = n.getIR.getInstructions
+          instructions.foldLeft(allMethods)((s: Set[IMethod], i) => i match {
+            case i: SSAInvokeInstruction =>
+              val target: MethodReference = i.getCallSite.getDeclaredTarget
+              val method: IMethod = cha.resolveMethod(target)
+              val out: Set[IMethod] = s - method
+              out
             case _ => s
           })
+        }
       )
     )
   }

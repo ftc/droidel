@@ -4,7 +4,7 @@ import edu.colorado.droidel.constants.DroidelConstants
 import edu.colorado.droidel.driver.{AbsurdityIdentifier, AndroidAppTransformer, AndroidCGBuilder}
 import edu.colorado.walautil.{Timer, Util}
 
-import scala.collection.JavaConversions._
+import scala.jdk.CollectionConverters._
 
 object Regression {
 
@@ -51,7 +51,7 @@ object Regression {
           .makeAndroidCallGraph
       	timer.printTimeTaken("Building call graph")
         val packagePrefix = test.toLowerCase
-        assert(walaRes.cg.exists(n => n.getMethod.getDeclaringClass.getName.toString.toLowerCase.contains(packagePrefix)),
+        assert(walaRes.cg.asScala.exists(n => n.getMethod.getDeclaringClass.getName.toString.toLowerCase.contains(packagePrefix)),
                "No application classes reachable in call graph!")
       	
       	// walk over the call call graph / points-to analysis and check that they are free of absurdities

@@ -33,17 +33,17 @@ class AndroidHarnessWriter(val writer : JavaWriter) {
     // wrap everything in a try/catch block so the Java compiler doesn't complain
     writer.beginControlFlow("try") // begin try    
   }
-  def beginAllocationComponent() : Unit = Unit;
+  def beginAllocationComponent() : Unit = ();
   
   def emitAllocationComponent(alloc : String) =  writer.emitStatement(alloc);
 
-  def endAllocationComponent() : Unit = Unit;
+  def endAllocationComponent() : Unit = ();
   
-  def beginCallToComponent() : Unit = Unit;
+  def beginCallToComponent() : Unit = ();
   
   def emitCallToComponent(call : String) =  writer.emitStatement(call);
 
-  def endCallToComponent() : Unit = Unit;
+  def endCallToComponent() : Unit = ();
   
   def emitEndHarness() {
     writer.endControlFlow() // end try
